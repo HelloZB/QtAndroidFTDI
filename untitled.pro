@@ -2,10 +2,15 @@ TEMPLATE = app
 
 QT += qml quick widgets androidextras
 
-SOURCES += main.cpp \
-    ftdimanager.cpp
+TARGET = Terminalko
 
-RESOURCES += qml.qrc
+SOURCES += main.cpp \
+    ftdimanager.cpp \
+    qmlitemmodel.cpp \
+    customproxy4qmlmodel.cpp
+
+RESOURCES += qml.qrc \
+    res.qrc
 
 # Additional import path used to resolve QML modules in Qt Creator's code model
 QML_IMPORT_PATH =
@@ -15,7 +20,9 @@ include(deployment.pri)
 
 
 HEADERS += \
-    ftdimanager.h
+    ftdimanager.h \
+    qmlitemmodel.h \
+    customproxy4qmlmodel.h
 
 DISTFILES += \
     android/AndroidManifest.xml \

@@ -136,10 +136,10 @@ public class QtFtDev  //extends org.qtproject.qt5.android.bindings.QtActivity//e
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-    int connToOneDevice(int baudR)
+    int connToOneDevice(int connIndx, int baudR, int dataB, int stopB, int partt, int flowCtrl)
     {
         lastReadLen = 0;
-        portIndex = 0;
+        portIndex = connIndx;
         int connF = 10;
         createDeviceList();
         if(DevCount > 0)
@@ -149,10 +149,11 @@ public class QtFtDev  //extends org.qtproject.qt5.android.bindings.QtActivity//e
             return connF; //dev not connect
 
         baudRate =   baudR;
-        stopBit = 1; /* 1:1stop bits, 2:2 stop bits */
-        dataBit = 8; /* 8:8bit, 7: 7bit */
-        parity = 0; /* 0: none, 1: odd, 2: even, 3: mark, 4: space */
-        flowControl = 0; /* 0:none, 1: CTS/RTS, 2:DTR/DSR, 3:XOFF/XON */
+        stopBit = (byte)stopB ; /* 0:1stop bits, 1:2 stop bits */
+        dataBit = (byte)dataB; /* 8:8bit, 7: 7bit */
+        parity = (byte)partt; /* 0: none, 1: odd, 2: even, 3: mark, 4: space */
+        flowControl = (byte)flowCtrl; /* 0:none, 1: CTS/RTS, 2:DTR/DSR, 3:XOFF/XON */
+
 
         setConfig(baudRate, dataBit, stopBit, parity, flowControl);
 
@@ -181,8 +182,8 @@ public class QtFtDev  //extends org.qtproject.qt5.android.bindings.QtActivity//e
         }
 
         switch (stopBits){
-        case 1: stopBits = D2xxManager.FT_STOP_BITS_1; break;
-        case 2: stopBits = D2xxManager.FT_STOP_BITS_2; break;
+        case 0: stopBits = D2xxManager.FT_STOP_BITS_1; break;
+        case 1: stopBits = D2xxManager.FT_STOP_BITS_2; break;
         default: stopBits = D2xxManager.FT_STOP_BITS_1; break;
         }
 
@@ -259,8 +260,8 @@ public class QtFtDev  //extends org.qtproject.qt5.android.bindings.QtActivity//e
             return -3;
 
         if (numBytes > 0)
-            ftDev.write(writeBuffer, numBytes);
-        return numBytes;
+            return ftDev.write(writeBuffer, numBytes);
+        return 0;
 
     }
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -275,6 +276,17 @@ public class QtFtDev  //extends org.qtproject.qt5.android.bindings.QtActivity//e
     }
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    int bytesAvailable()
+    {
+        if (ftDev.isOpen() == false){
+            lastReadLen = -1;
+            return lastReadLen;
+        }else{
+            return ftDev.getQueueStatus();
+        }
+
+    }
+  //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     String readData()
     {
         byte[] usbdata = new byte[USB_DATA_BUFFER];
@@ -298,7 +310,7 @@ public class QtFtDev  //extends org.qtproject.qt5.android.bindings.QtActivity//e
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-    void disconnectFunction()
+    int disconnectFunction()
     {
         DevCount = -1;
         currentPortIndex = -1;
@@ -308,6 +320,7 @@ public class QtFtDev  //extends org.qtproject.qt5.android.bindings.QtActivity//e
                 ftDev.close();
             }
         }
+        return 0;
     }
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>

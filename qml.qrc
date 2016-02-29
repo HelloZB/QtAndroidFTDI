@@ -1,5 +1,12 @@
 <RCC>
     <qresource prefix="/">
         <file>main.qml</file>
+        <file>CustomTextEdit.qml</file>
+        <file>ConnectPage.qml</file>
+        <file>TerminalPage.qml</file>
+        <file>SettingsPage.qml</file>
+        <file>CustomPushButton.qml</file>
+        <file>HistoryPage.qml</file>
+        <file>ScrollBarVertical.qml</file>
     </qresource>
 </RCC>

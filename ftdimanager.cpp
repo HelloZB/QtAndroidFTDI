@@ -1,25 +1,36 @@
 #include "ftdimanager.h"
+#include <QSettings>
+#include <QtAndroid>
+
 //=============================================================================================================================
-FtdiManager::FtdiManager(QAndroidJniObject adnrActivity, QObject *parent) : QObject(parent), adnrActivity(adnrActivity)
+FtdiManager::FtdiManager(QObject *parent) : QObject(parent)
 {
     QTimer *readTmr = new QTimer;
-    readTmr->setInterval(50);
+    readTmr->setInterval(150);
     readTmr->setSingleShot(true);
 
     connect(this, SIGNAL(startReadTmr()), readTmr, SLOT(start()) );
     connect(this, SIGNAL(stopReadTmr()), readTmr, SLOT(stop()) );
     connect(readTmr, SIGNAL(timeout()), this, SLOT(onReadTmr()) );
+
+    deviceModel = new QmlItemModel(QString("value").split(",") );
+    historyModel = new QmlItemModel(QString("value").split(",") );
+
+    QList<int> listInt;
+    listInt.append(Qt::UserRole + 1);
+    proxy_historyModel = new CustomProxy4QmlModel(listInt);
+    proxy_historyModel->setDynamicSortFilter(true);
+    proxy_historyModel->setSourceModel(historyModel);
+
+    this->adnrActivity = QtAndroid::androidActivity();
+
 }
 //=============================================================================================================================
 void FtdiManager::startJar()
 {
-
-
     qtFtDev2xxManager =  QAndroidJniObject(QByteArray("org/qtproject/qt5/QtFtDev").constData());
 
-
-    qDebug() << "context is valid = " <<adnrActivity.isValid() << adnrActivity.object() <<  qtFtDev2xxManager.isValid() << qtFtDev2xxManager.object() << QAndroidJniObject::isClassAvailable(QByteArray("org/qtproject/qt5/QtFtDev").constData());
-
+//    qDebug() << "context is valid = " <<adnrActivity.isValid() << adnrActivity.object() <<  qtFtDev2xxManager.isValid() << qtFtDev2xxManager.object() << QAndroidJniObject::isClassAvailable(QByteArray("org/qtproject/qt5/QtFtDev").constData());
 
     QAndroidJniEnvironment env;
     if (env->ExceptionCheck()) {
@@ -27,21 +38,8 @@ void FtdiManager::startJar()
         qDebug() << "1 env =================================================== ";
         env->ExceptionClear();
     }
-
-
-
-
-    qDebug() << "from str 2 = " << qtFtDev2xxManager.callObjectMethod(QByteArray("fromNumberTwo").constData(), QByteArray("(I)Ljava/lang/String;").constData(), 7).toString();
-
-    if (env->ExceptionCheck()) {
-        // Handle exception here.
-        qDebug() << "2 env =================================================== ";
-        env->ExceptionClear();
-    }
-
-
     qDebug() << "getInstance = " << qtFtDev2xxManager.callMethod<jint>(QByteArray("getInstance").constData(), QByteArray("(Landroid/content/Context;)I").constData(), adnrActivity.object());
-//                                                                       QByteArray("(I)Ljava/lang/Object;").constData(), adnrActivity.object());
+//                                                                           QByteArray("(I)Ljava/lang/Object;").constData(), adnrActivity.object());
 
     if (env->ExceptionCheck()) {
         // Handle exception here.
@@ -49,30 +47,12 @@ void FtdiManager::startJar()
         env->ExceptionClear();
     }
 
+    QTimer::singleShot(200, this, SLOT(createDeviceInfoList()));
+    loadSettings(0);
 
-//    ftD2xx = QAndroidJniObject::callStaticObjectMethod(QByteArray("com/ftdi/j2xx/D2xxManager").constData(),
-//                                                       QByteArray("getInstance").constData(),
-//                                                       QByteArray("(Landroid/content/Context;)Lcom/ftdi/j2xx/D2xxManager;").constData(),
-//                                                       adnrActivity.object());
-
-
-////                ); ///QAndroidJniObject(QByteArray("com/ftdi/j2xx/D2xxManager").constData());
-//    qDebug() << "context is valid = " <<adnrActivity.isValid() << adnrActivity.object() <<  ftD2xx.isValid() << ftD2xx.object() << QAndroidJniObject::isClassAvailable(QByteArray("com/ftdi/j2xx/D2xxManager").constData());
-
-
-////    QAndroidJniEnvironment env;
-//    if (env->ExceptionCheck()) {
-//        // Handle exception here.
-//        qDebug() << "1 env =================================================== ";
-//        env->ExceptionClear();
-//    }
-
-
-    createDeviceInfoList();
-//    connectToOnePort();
-//    deviceStatus();
-
-
+    historyModel->clearAllData();
+    for(int i = 0, iMax = listHistoryCommand.size(); i < iMax; i++)
+        historyModel->addCustomDevice(QList<QVariant>() << listHistoryCommand.at(i));
 
 }
 //=============================================================================================================================
@@ -89,22 +69,18 @@ void FtdiManager::onBtnPrssd()
         env->ExceptionClear();
     }
 
-//        jstring strJ = strhello.object<jstring>();
+    //        jstring strJ = strhello.object<jstring>();
 
     qDebug() << "stringNumber=" << strhello.toString(); // <<strJ;
     emit addLineToLog(QDateTime::currentDateTime().toString());
     connectToOnePort();
 }
 //=============================================================================================================================
-void FtdiManager::createDeviceInfoList()
+void FtdiManager::createDeviceInfoList(bool onlyUpdate)
 {
-//    jint devCount = ftD2xx.callMethod<jint>(QByteArray("createDeviceInfoList").constData(),
-//                                            QByteArray("(Landroid/content/Context;I)").constData(),
-//                                            adnrActivity.object());
+    deviceModel->clearAllData();
+
     jint devCount = qtFtDev2xxManager.callMethod<jint>(QByteArray("createDeviceList").constData());
-//                                                                       QByteArray("(I)Ljava/lang/Object;").constData(), adnrActivity.object());
-
-
 
     QAndroidJniEnvironment env;
     if (env->ExceptionCheck()) {
@@ -113,22 +89,22 @@ void FtdiManager::createDeviceInfoList()
         env->ExceptionClear();
     }
 
-    qDebug() << "devCOund " << devCount;
+    for(int i = 0; i < devCount; i++)
+        deviceModel->addCustomDevice(QList<QVariant>() << QString("ttyUSB%1").arg(i));
 
-    emit addLineToLog("devCount= " + QString::number(devCount) );
-
-    if(devCount > 0)
+    if(devCount > 0){
+        emit setCurrntPortIndx(devCount - 1);
+    }else
+        emit setCurrntPortIndx(-1);
+    if(devCount > 0 && !onlyUpdate)
         connectToOnePort();
 }
 //=============================================================================================================================
 void FtdiManager::deviceStatus()
 {
     jint devCount = qtFtDev2xxManager.callMethod<jint>(QByteArray("checkDeviceStatus").constData());
-//                                                                       QByteArray("(I)Ljava/lang/Object;").constData(), adnrActivity.object());
-
 
     QString devStts("");
-
     switch(devCount){
     case 0: devStts = "DEV_NOT_CONNECT"; break;
     case 1: devStts = "DEV_NOT_CONFIG"; break;
@@ -136,23 +112,66 @@ void FtdiManager::deviceStatus()
     default: devStts = "unknown"; break;
     }
 
-
     QAndroidJniEnvironment env;
     if (env->ExceptionCheck()) {
         // Handle exception here.
         qDebug() << "11 env =================================================== ";
         env->ExceptionClear();
     }
-
-    qDebug() << "devCOund " << devCount;
-
     emit addLineToLog("devStts= " + devStts + " retVal=" + QString::number(devCount));
 }
 //=============================================================================================================================
 void FtdiManager::connectToOnePort()
 {
+    QList<QVariant> list = loadSettings(1);
+    while(list.size() < 4)
+        list.append(0);
+
+    if(list.size() < 5)
+        list.append(3);
+
+    connectToOnePort(0, list.at(4).toInt(), list.at(0).toInt(), list.at(1).toInt(), list.at(2).toInt(), list.at(3).toInt());
+}
+//=============================================================================================================================
+void FtdiManager::connectToOnePort(int indx, int baudIndx, int dataIndx, int stopIndx, int parityIndx, int flowIndx)
+{
+
+    QList<QVariant> listVar;
+    listVar.append(dataIndx);
+    listVar.append(stopIndx);
+    listVar.append(parityIndx);
+    listVar.append(flowIndx);
+    listVar.append(baudIndx);
+    saveSettings(listVar, 1);
+
+    jint baudRate ;
+
+    switch (baudIndx) {
+    case 0: baudRate = 1200; break;
+    case 1: baudRate = 2400; break;
+    case 2: baudRate = 4800; break;
+    case 3: baudRate = 9600; break;
+    case 4: baudRate = 19200; break;
+    case 5: baudRate = 38400; break;
+    case 6: baudRate = 57600; break;
+    case 7: baudRate = 115200; break;
+
+    default: baudRate = 9600; break;
+    }
+
+    jint devIndx = indx;
+    jint devDataIndx = dataIndx;
+    jint devStopIndx = stopIndx ;
+    jint devParityIndx = parityIndx;
+    jint devFlowIndx = flowIndx;
+
     jint retVal = qtFtDev2xxManager.callMethod<jint>(QByteArray("connToOneDevice").constData(),
-                                                                       QByteArray("(I)I").constData(), 9600);
+                                                     QByteArray("(IIIIII)I").constData(), devIndx,
+                                                     baudRate,
+                                                     devDataIndx,
+                                                     devStopIndx,
+                                                     devParityIndx,
+                                                     devFlowIndx  );
 
     QAndroidJniEnvironment env;
     if (env->ExceptionCheck()) {
@@ -161,36 +180,55 @@ void FtdiManager::connectToOnePort()
         env->ExceptionClear();
     }
 
-    qDebug() << "retVal " << retVal;
-
     QString openStts("");
     switch (retVal) {
-    case 0: openStts = "Opened!" ; break;
-    case 1: openStts = "if( currentPortIndex == portIndex && ftDev != null && true == ftDev.isOpen() )"; break;
-    case 2: openStts = "if(ftDev == null)"; break;
-    case 3: openStts = "! if (true == ftDev.isOpen()){"; break;
+    case 0: openStts = tr("Opened ttyUSB%1!").arg(indx) ;  emit onFtdiStateChanged(true); emit startReadTmr(); break;
+    case 1: openStts = tr("Already opened ttyUSB%1!").arg(indx);  emit onFtdiStateChanged(true); emit startReadTmr(); break;
+    case 2: openStts = tr("Device not valid ttyUSB%1!").arg(indx); break;
+    case 3: openStts = tr("Can't open ttyUSB%1!").arg(indx); break;
 
     default: openStts = "unkonown error";   break;
     }
 
-
-
-    emit addLineToLog("Open status: " + openStts + " retVal=" + QString::number(retVal) );
+    emit addLineToLog(openStts );
 }
 //=============================================================================================================================
 void FtdiManager::disconnectFromPort()
 {
+    emit stopReadTmr();
+    emit onFtdiStateChanged(false);
+    emit addLineToLog("Device disconected");
+    qtFtDev2xxManager.callMethod<jint>(QByteArray("disconnectFunction").constData());
 
+    createDeviceInfoList(true);
 }
 //=============================================================================================================================
-void FtdiManager::sendDataToPort(QString line)
+void FtdiManager::sendDataToPort(QString line, bool hexOut, int endLineIndx)
 {
-    line.append("\r\n");
+    QString tmpStr(line);
+    emit startReadTmr();
+
+    if(hexOut){
+        switch(endLineIndx){
+        case 0:  line.append("0D0A"); break;
+        case 1:  line.append("0D"); break;
+        case 2:  line.append("0A"); break;
+        default: break;
+        }
+    }else{
+
+        switch(endLineIndx){
+        case 0:  line.append("\r\n"); break;
+        case 1:  line.append("\r"); break;
+        case 2:  line.append("\n"); break;
+        default: break;
+        }
+    }
+
 
     QAndroidJniEnvironment env;
-
-    int len = line.size();
-    line = line.toLocal8Bit().toHex();
+    if(!hexOut)
+        line = line.toLocal8Bit().toHex();
 
     if((line.size() % 2))
         line.prepend("0");
@@ -198,7 +236,7 @@ void FtdiManager::sendDataToPort(QString line)
     QAndroidJniObject string2 = QAndroidJniObject::fromString(line);
 
     jint retVal = qtFtDev2xxManager.callMethod<jint>(QByteArray("sendData").constData(),
-                                                                       QByteArray("(Ljava/lang/String;)I").constData(),
+                                                     QByteArray("(Ljava/lang/String;)I").constData(),
                                                      string2.object<jstring>()/*, arr*/);
     if (env->ExceptionCheck()) {
         // Handle exception here.
@@ -206,39 +244,103 @@ void FtdiManager::sendDataToPort(QString line)
         qDebug() << "11 env =================================================== ";
         env->ExceptionClear();
     }
-    emit addLineToLog(QString("SendLine %1 %2").arg(len).arg(retVal));
 
-    qDebug() << "sendLine " << line << len << retVal;
-
-
+    if(!listHistoryCommand.contains(tmpStr.simplified().trimmed(), Qt::CaseInsensitive)){
+        listHistoryCommand.prepend(tmpStr.simplified().trimmed());
+        historyModel->prependCustomDevice(QList<QVariant>() << listHistoryCommand.first());
+        saveSettings(QList<QVariant>(), 4); //save list last command
+    }
 
     if(retVal >= 0){
-        emit addLineToLog(line);
-        emit startReadTmr();
+        emit addLineToLog(tmpStr);
     }else{
         emit addLineToLog("line error write\r\n" + QString::number(retVal));
-
-        qDebug() << "stopReadTmr";
-        stopReadTmr();
+        disconnectFromPort();
     }
+}
+//=============================================================================================================================
+void FtdiManager::setThisHistoryFilter(const QString &str)
+{
+    proxy_historyModel->setNewFileterStr(str);
+}
+//=============================================================================================================================
+void FtdiManager::delThisHistoryIndx(const int &indx)
+{
+    int row = proxy_historyModel->mapToSource(proxy_historyModel->index(indx,0)).row();
+    if(row < 0 || row > listHistoryCommand.size())
+        return;
+    historyModel->removeThisRow(row);
+    listHistoryCommand.removeAt(row);
+    saveSettings(QList<QVariant>(), 4);
+}
+//=============================================================================================================================
+void FtdiManager::saveQmlSett(const int &intVal, const int &key)
+{
+    QSettings settings("Hello_ZB", "QtAndroidFtdiTerminal");
+
+    switch(key){
+    case 0: {  settings.beginGroup("terminal");   settings.setValue("endSymb", intVal);  break;}
+    }
+    settings.endGroup();
+}
+//=============================================================================================================================
+void FtdiManager::saveQmlSett(const bool &boolVal, const int &key)
+{
+    QSettings settings("Hello_ZB", "QtAndroidFtdiTerminal");
+
+    switch(key){
+    case 0: {  settings.beginGroup("terminal");    settings.setValue("hexOut", boolVal);  break;}
+
+    }
+    settings.endGroup();
+
+}
+//=============================================================================================================================
+void FtdiManager::saveQmlSettRealVal(const qreal &realVal, const int &key)
+{
+    QSettings settings("Hello_ZB", "QtAndroidFtdiTerminal");
+
+    switch(key){
+    case 0: {  settings.beginGroup("sett");    settings.setValue("fontSize", realVal);  break;}
+
+    }
+    settings.endGroup();
+
+}
+//=============================================================================================================================
+void FtdiManager::sendLineHexValidator( QString line)
+{
+    line = line.simplified().trimmed().remove(" ");
+    bool isValid = false;
+    if(line.isEmpty()){
+        isValid = true;
+    }else{
+        if(line.size()%2){
+            isValid = false;
+        }else{
+
+            QString tmpStr = QByteArray::fromHex(line.toLocal8Bit()).toHex();
+            isValid = (tmpStr.length() == line.length());
+        }
+    }
+
+    emit sendLineHexIsValid(isValid);
 }
 //=============================================================================================================================
 void FtdiManager::onReadTmr()
 {
     if(readData())
         emit startReadTmr();
+    else{
+        disconnectFromPort();
+
+    }
 }
 //=============================================================================================================================
 bool FtdiManager::readData()
 {
-//    int USB_DATA_BUFFER = 8192;
-//    jbyteArray arr = qtFtDev2xxManager.callMethod<jbyteArray>(QByteArray("readData").constData());
-    //                                                        QByteArray("(I[B)I").constData(), line.size(), arr);
-
-    QAndroidJniObject stringArray = qtFtDev2xxManager.callObjectMethod<jstring>(QByteArray("readData").constData());
-
+    jint bytesAvailable = qtFtDev2xxManager.callMethod<jint>(QByteArray("bytesAvailable").constData());
     QAndroidJniEnvironment env;
-
     if (env->ExceptionCheck()) {
         // Handle exception here.
         qDebug() << "11 env =================================================== ";
@@ -247,54 +349,155 @@ bool FtdiManager::readData()
         env->ExceptionClear();
         return false;
     }
+
+    if(bytesAvailable < 0){
+        return false;
+    }
+
+    if(bytesAvailable < 1)
+        return true;
+
+    QAndroidJniObject stringArray = qtFtDev2xxManager.callObjectMethod<jstring>(QByteArray("readData").constData());
+    if (env->ExceptionCheck()) {
+        // Handle exception here.
+        qDebug() << "11 env =================================================== ";
+        emit addLineToLog("read errror");
+
+        env->ExceptionClear();
+        disconnectFromPort();
+        return false;
+    }
     QString readStr = stringArray.toString();
+    if(readStr.isEmpty())
+        return true;
+
     if((readStr.length()%2))
         readStr.prepend("0");
 
     readStr = QByteArray::fromHex(readStr.toLocal8Bit());
 
-//    int len = env->GetArrayLength (arr);
-
-//    if(len < 1)
-//        return true;
-
-//    unsigned char* buf = new unsigned char[len];
-//    env->GetByteArrayRegion (arr, 0, len, reinterpret_cast<jbyte*>(buf));
-
-////    QByteArray readStr(/*(unsigned char*)*/buf,len);
-//    QString readStr("");
-//    for(int i = 0; i < len; i++)
-//        readStr.append(buf[i]);
-
-//    qDebug() << "readLine " << buf << len << arr;
-//    qDebug() << "sendLine " << readStr;
-
     if(!readStr.isEmpty())
-        emit addLineToLog(QString(readStr.toLocal8Bit().toHex()) + "\r\n" + readStr);
+        emit addLineToLog(readStr);
 
     return true;
 }
 //=============================================================================================================================
-int FtdiManager::sendDataToPort(unsigned char *line, int len)
+QList<QVariant> FtdiManager::loadSettings(int key)
 {
-    jint lineSize = len;
+    QSettings settings("Hello_ZB", "QtAndroidFtdiTerminal");
+    QList<QVariant> list;
+    switch(key){
+    case 0: { //load all settings
+        settings.beginGroup("uart");
+        emit onConnectPageSettt(settings.value("dataBits", 0).toInt(),
+                                settings.value("stopBits", 0).toInt(),
+                                settings.value("parity", 0).toInt(),
+                                settings.value("flowCtrl", 0).toInt(),
+                                settings.value("baudRate", 3).toInt() );
 
-    QAndroidJniEnvironment env;
+        settings.endGroup();
 
-//    jbyteArray arr = env->NewByteArray(lineSize);
-//    env->SetByteArrayRegion(arr, 0, lineSize,reinterpret_cast<jbyte*>(line) );
+        settings.beginGroup("terminal");
+        emit onTerminalPageSettt(settings.value("endSymb", 0).toInt(), settings.value("hexOut", false).toBool());
+        settings.endGroup();
 
-    jint retVal = qtFtDev2xxManager.callMethod<jint>(QByteArray("sendData").constData(),
-                                                                       QByteArray("(I)I").constData(), lineSize/*, arr*/);
-    if (env->ExceptionCheck()) {
-        // Handle exception here.
-        emit addLineToLog("write exeption");
-        qDebug() << "11 env =================================================== ";
-        env->ExceptionClear();
+        settings.beginGroup("sett");
+        emit onSettPage(settings.value("fontSize", 0).toReal());
+        settings.endGroup();
+
+        settings.beginGroup("app");
+        listHistoryCommand = settings.value("listHistoryCommand").toStringList();
+        if(listHistoryCommand.isEmpty())
+            listHistoryCommand = QString("+++ ATAD ATBD ATCH ATID ATNI ATSL ATSH ATVR ATHV ATAP ATSM ATND ATBD").split(' ');
+        settings.endGroup();
+
+        return list; }
+
+    case 1:{
+        settings.beginGroup("uart");
+        list.append(settings.value("dataBits", 0));
+        list.append(settings.value("stopBits", 0));
+        list.append(settings.value("parity", 0));
+        list.append(settings.value("flowCtrl", 0));
+        list.append(settings.value("baudRate", 3));
+
+        settings.endGroup();
+        return list;}
     }
-    emit addLineToLog(QString("SendLine %1 %2").arg(len).arg(retVal));
+    return list;
+}
+//=============================================================================================================================
+void FtdiManager::saveSettings(QList<QVariant> list, int key)
+{
+    QSettings settings("Hello_ZB", "QtAndroidFtdiTerminal");
+    switch(key){
+    case 0: { //save all settings
+        settings.beginGroup("uart");
+        if(list.size() != 8)
+            return;
+        settings.setValue("dataBits", list.at(0));
+        settings.setValue("stopBits", list.at(1));
+        settings.setValue("parity", list.at(2));
+        settings.setValue("flowCtrl", list.at(3));
+        settings.setValue("baudRate", list.at(4));
+        settings.endGroup();
 
-    qDebug() << "sendLine " << line << len << retVal;
-    return retVal;
+        settings.beginGroup("terminal");
+        settings.setValue("endSymb", list.at(5));
+        settings.setValue("hexOut", list.at(6));
+        settings.endGroup();
+
+        settings.beginGroup("sett");
+        settings.setValue("fontSize", list.at(7));
+        settings.endGroup();
+
+        while(listHistoryCommand.size() > 1000)
+            listHistoryCommand.removeLast();
+
+        settings.beginGroup("app");
+        settings.setValue("listHistoryCommand",listHistoryCommand);
+        settings.endGroup();
+
+        return ; }
+
+    case 1:{
+        settings.beginGroup("uart");
+        if(list.size() != 5)
+            return;
+        settings.setValue("dataBits", list.at(0));
+        settings.setValue("stopBits", list.at(1));
+        settings.setValue("parity", list.at(2));
+        settings.setValue("flowCtrl", list.at(3));
+        settings.setValue("baudRate", list.at(4));
+
+        settings.endGroup();
+        return ;}
+
+    case 2:{
+        if(list.size() != 2)
+            return;
+        settings.beginGroup("terminal");
+        settings.setValue("endSymb", list.at(0));
+        settings.setValue("hexOut", list.at(1));
+        settings.endGroup();
+        return; }
+
+    case 3:{
+        if(list.size() != 1)
+            return;
+        settings.beginGroup("sett");
+        settings.setValue("fontSize", list.at(0));
+        settings.endGroup();
+        return; }
+
+    case 4:{
+        while(listHistoryCommand.size() > 1000)
+            listHistoryCommand.removeLast();
+
+        settings.beginGroup("app");
+        settings.setValue("listHistoryCommand",listHistoryCommand);
+        settings.endGroup();
+        return;}
+    }
 }
 //=============================================================================================================================

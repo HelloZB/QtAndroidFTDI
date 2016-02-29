@@ -4,162 +4,212 @@ import QtQuick.Window 2.2
 import QtQuick.Dialogs 1.2
 
 ApplicationWindow {
-    title: qsTr("Hello World")
+    title: qsTr("QtAndroidFTDI Terminal")
     width: 640
     height: 480
     visible: true
+    property bool ftdiIsConnected: false
 
     signal addToLog(string mess)
+    signal connStateChanged(bool isConnected)
+
+    signal connectPageSettt(int dataIndx, int stopIndx, int parityIndx, int flowIndx, int baudIndx);
+
+    signal terminalPageSettt(int endLineIndx, bool hexOut);
+
+    signal settPage(real defH);
+
+    signal setCurrntPortIndx(int portIndx);
+
+    signal sendLineHexIsValid(bool isValid);
+
+
+    onSetCurrntPortIndx: {
+        cpPage.setCurrntPortIndx(portIndx);
+    }
+
+
+    onConnectPageSettt: {
+        cpPage.connectPageSettt(dataIndx, stopIndx, parityIndx, flowIndx, baudIndx);
+    }
+
+    onTerminalPageSettt: {
+        tpPage.terminalPageSettt(endLineIndx, hexOut);
+    }
+
+    onSettPage: {
+        if(defH > Screen.logicalPixelDensity && (Screen.width < Screen.height ?
+                    width < (Screen.width * 0.25) :
+                    height < (Screen.height * 0.25)))
+            defHeightFontPixel = defH
+    }
+
+    onSendLineHexIsValid: {
+        tpPage.sendLineHexIsValid(isValid);
+    }
+
+    property real defHeightFontPixel: Screen.pixelDensity  * 3.8;
+    property real defHeightPushButton: defHeightFontPixel * 1.6
+    property real defHeightPushButtonSmll: defHeightFontPixel * 1.4
+    property real defHeightFontPixelLog: defHeightFontPixel * 0.6;
+    property real defHeightLine: defHeightFontPixel * 0.1
+
+
+    property string defColorBackground: "#efefef"
+    property string defColorTop: "#aaaaaa"
+    property string defColorText: "black"
+    property string defColorButtonFill: "#0d670d"
+    property string defColorButtonText: defColorBackground
+    property string defColorLine: "#gray"
+
+    property int defRadiusButton: 4;
+
+    property real defMargins: defHeightFontPixel * 0.2
+
+
+    onConnStateChanged: {
+        ftdiIsConnected = isConnected
+        if(isConnected){
+           changeStackViewPage(1)
+        }
+    }
 
     onAddToLog: {
-        textArea1.text = textArea1.text + mess + "\r\n"
+        tpPage.appendPlainText(mess)
+    }
+
+
+    function changeStackViewPage(indx){
+        switch(indx){
+        case 0: stackView.push({item: cpPage, visible: true}); break;
+        case 1: stackView.push({item: tpPage, visible: true}); break;
+        case 2: stackView.push({item: spPage, visible: true});break;
+        case 3: stackView.push({item: hpPage, visible: true});break;
+
+        default: break;
+        }
     }
 
     Rectangle {
         id: root
         anchors.fill: parent
-        color: "#efefef"
+        color: defColorBackground
 
-        Rectangle {
-            id: rtConnDisconn
-            width: 333
-            height: 59
-            color: "#32c011"
-            radius: 4
+
+        Row{
+            id: rtTop
+
             anchors.left: parent.left
-            anchors.leftMargin: 8
             anchors.top: parent.top
-            anchors.topMargin: 14
-
-            MouseArea {
-                id: mouseArea1
-                anchors.fill: parent
-
-                Text {
-                    id: text1
-                    x: 60
-                    y: 22
-                    text: qsTr("Connect/Disconnect")
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    font.family: "Times New Roman"
-                    font.pixelSize: 28
-                }
-
-                onClicked: {
-                    ftdiManager.connectToOnePort();
-                }
-
-                onPressAndHold: {
-                    ftdiManager.deviceStatus();
-                }
-            }
-        }
-
-        Rectangle {
-            id: rtClearLog
-            x: 347
-            y: 14
-            width: 285
-            height: 59
-            color: "#32c011"
-            radius: 4
-            anchors.top: parent.top
-            anchors.topMargin: 14
             anchors.right: parent.right
-            anchors.rightMargin: 8
+            height: defHeightPushButton
 
-            MouseArea {
-                id: mouseArea2
-                anchors.fill: parent
+            anchors.margins: defMargins
 
-                Text {
-                    id: text2
-                    x: 82
-                    y: 20
-                    text: qsTr("Clear Log")
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    font.pixelSize: 28
+            spacing: defMargins
+
+            CustomPushButton{
+                id: cpbConnectPage
+                height: parent.height
+                text: qsTr("Device")
+
+                width: (parent.width / 3 ) - parent.spacing
+
+                radius: defRadiusButton
+                color: defColorButtonText
+                fillColor: defColorButtonFill
+                textSize: defHeightFontPixel
+                onAnimationDone: {
+                    changeStackViewPage(0);
                 }
-
-                onClicked: {
-                    textArea1.text = "";
-                }
+                enabled: false
             }
+
+            CustomPushButton{
+                id: cpbTerminalPage
+                height: parent.height
+                text: qsTr("Terminal")
+                width: cpbConnectPage.width
+                radius: defRadiusButton
+                color: defColorButtonText
+                fillColor: defColorButtonFill
+                textSize: defHeightFontPixel
+                onAnimationDone: {
+                    changeStackViewPage(1)
+                }
+                enabled: true
+            }
+
+            Item{
+                height: parent.height
+                width: parent.width - cpbConnectPage.width * 2 - cpbSettingsPage.width  - 3 * parent.spacing - 2 * defMargins
+            }
+
+            CustomPushButton{
+                id: cpbSettingsPage
+                height: parent.height
+                text: ""
+                imgSource: "qrc:/img/katynko/settings.png"
+                radius: defRadiusButton
+                color: defColorButtonText
+                fillColor: defColorButtonFill
+                textSize: defHeightFontPixel
+                width: height//cpbConnectPage.width
+                //                    onIAmReleased: videoS.refreshDevList();
+                onAnimationDone: {
+                    changeStackViewPage(2)
+                }
+                enabled: true
+            }
+
         }
 
-        TextEdit {
-            id: textEdit1
-            y: 412
-            width: 396
-            height: 59
-            text: qsTr("+++")
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 9
-            cursorVisible: false
-            font.pixelSize: 28
-            font.family: "Arial"
+
+        StackView{
+            id: stackView
             anchors.left: parent.left
-            anchors.leftMargin: 8
-        }
-
-        TextArea {
-            id: textArea1
-            text: "Hello"
-            readOnly: true
-            textColor: "#000000"
-            frameVisible: true
-            font.pixelSize: 28
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 85
+            anchors.top: rtTop.bottom
             anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.top: parent.top
-            anchors.topMargin: 79
+            anchors.bottom: parent.bottom
+            visible: true
+            anchors.margins: defMargins
+            initialItem: cpPage;
 
             focus: true
-            Keys.onReturnPressed: {
-                ftdiManager.sendDataToPort(textEdit1.text);
-            }
-        }
+            Keys.onReleased: if (event.key === Qt.Key_Back && stackView.depth > 1) {
+                                 stackView.pop();
+                                 event.accepted = true;
+                             }
 
-        Rectangle {
-            id: rtSendLine
-            x: 410
-            y: 412
-            width: 209
-            height: 59
-            color: "#32c011"
-            radius: 4
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 9
-            anchors.right: parent.right
-            anchors.rightMargin: 21
-            MouseArea {
-                id: mouseArea3
-                anchors.fill: parent
-                Text {
-                    id: text3
-                    x: 82
-                    y: 20
-                    text: qsTr("Send")
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    font.pixelSize: 28
-                }
+            onCurrentItemChanged: {
+                cpbSettingsPage.enabled = !(currentItem === spPage);
+                cpbTerminalPage.enabled = !((currentItem === tpPage) || (currentItem === hpPage));
+                cpbConnectPage.enabled = !(currentItem === cpPage);
 
-                onClicked: {
-                    ftdiManager.sendDataToPort(textEdit1.text);
-                }
 
             }
+
         }
 
+        ConnectPage{
+            id: cpPage
+            visible: true
+        }
 
+        TerminalPage{
+            id: tpPage
+            visible: false
+        }
 
+        SettingsPage{
+            id: spPage
+            visible: false
+        }
+
+        HistoryPage{
+            id: hpPage
+            visible: false
+        }
 
     }
 }

@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/img">
+        <file>katynko/clear_left.png</file>
+        <file>katynko/dashed_elmnt_red.png</file>
+        <file>katynko/dashed_elmnt.png</file>
+        <file>katynko/settings.png</file>
+        <file>katynko/key_enter.png</file>
+        <file>katynko/fontsizedefault_koffice.png</file>
+        <file>katynko/fontsizedown_koffice.png</file>
+        <file>katynko/fontsizeup_koffice.png</file>
+        <file>katynko/history.png</file>
+    </qresource>
+</RCC>
